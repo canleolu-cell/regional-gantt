@@ -1,0 +1,165 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>区域项目甘特图（欧洲 / 韩国 / 柬埔寨 / 泰国）</title>
+<style>
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;margin:24px;color:#1c2733;background:#f7f9fb}
+h1{font-size:22px;margin:0 0 4px} .sub{color:#5a6a78;font-size:13px;margin-bottom:6px;line-height:1.7}
+.legend span{display:inline-block;margin-right:14px;font-size:12px} .dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.tabs{margin:14px 0 2px}
+.tab{display:inline-block;padding:7px 20px;margin-right:8px;border-radius:6px;background:#eef3f7;color:#22384d;font-size:14px;font-weight:600;cursor:pointer;border:1px solid #d7e0e8;user-select:none}
+.tab.on{background:#22384d;color:#fff;border-color:#22384d}
+.rtitle{font-size:18px;font-weight:700;margin:16px 0 2px}
+.rsub{color:#5a6a78;font-size:12.5px;line-height:1.6}
+.chart{display:grid;grid-template-columns:34% 13% 1fr;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-top:10px;position:relative}
+.hcell{background:#eef3f7;font-size:12px;font-weight:600;color:#44566a;padding:7px 8px;border-bottom:2px solid #d7e0e8}
+.htime{position:relative}
+.mh{position:absolute;top:7px;transform:translateX(-50%);white-space:nowrap;font-weight:600}
+.phase{grid-column:1/-1;background:#22384d;color:#fff;font-weight:600;font-size:13px;padding:6px 8px}
+.task{padding:7px 8px;border-bottom:1px solid #e6ebef} .tname{font-size:13px;font-weight:600} .tnote{font-size:11.5px;color:#66788a;margin-top:2px;line-height:1.55}
+.meta{padding:7px 8px;border-bottom:1px solid #e6ebef;font-size:11.5px;color:#44566a;line-height:1.6} .dates{color:#8296a8}
+.badge{color:#fff;border-radius:8px;padding:1px 7px;font-size:11px;white-space:nowrap}
+.track{position:relative;border-bottom:1px solid #e6ebef;min-height:46px}
+.bar{position:absolute;top:50%;transform:translateY(-50%);height:14px;border-radius:4px;opacity:.92;z-index:1}
+.bar.far{opacity:.45}
+.diamond{position:absolute;top:50%;width:12px;height:12px;background:#6b3fa0;transform:translateY(-50%) rotate(45deg);z-index:1}
+.tbd-note{font-size:11.5px;color:#9a8a2a;position:absolute;top:50%;transform:translateY(-50%)}
+.lines{position:absolute;left:47%;right:0;top:32px;bottom:0;z-index:3;pointer-events:none}
+.vline{position:absolute;top:0;bottom:0;width:1px;background:rgba(70,95,120,.18)}
+.vline.today{width:2px;background:#e5484d}
+.vtag{position:absolute;top:8px;writing-mode:vertical-rl;font-size:11px;font-weight:600;letter-spacing:1px;color:#51657a;background:rgba(255,255,255,.82);padding:5px 1px;border-radius:3px}
+.vtag.today-tag{color:#e5484d}
+.err{background:#fdecec;color:#a33;border:1px solid #f0b4b4;border-radius:6px;padding:12px 16px;margin-top:14px;font-size:13.5px;line-height:1.7}
+a{color:#2f6fd0}
+</style></head><body>
+<h1>区域项目甘特图 — 欧洲 / 韩国 / 柬埔寨 / 泰国</h1>
+<div id="last-updated" style="display:inline-block;background:#22384d;color:#fff;font-size:14px;font-weight:600;border-radius:6px;padding:6px 14px;margin:6px 0 10px">正在读取数据文件…</div>
+<div class="sub">本页直接读取同目录的数据文件 <b>data.xlsx</b> 实时生成，与 Excel 模板同一套版式与状态色：深蓝行为阶段，任务分级编号，实心进度条按开始/结束日期定位，颜色由状态决定。<br>
+更新方法：在仓库里替换 <b>data.xlsx</b>（或改网盘上的同一文件），刷新本页即是最新版，无需改网页本身。数据文件：<a id="dl" href="data.xlsx">data.xlsx</a></div>
+<div class="legend"><span><i class="dot" style="background:#2e9e5b"></i>已完成</span><span><i class="dot" style="background:#2f6fd0"></i>进行中</span><span><i class="dot" style="background:#d95336"></i>延期</span><span><i class="dot" style="background:#b9c2cc"></i>计划/未开始</span><span><i class="dot" style="background:#6b3fa0"></i>里程碑</span><span><i class="dot" style="background:#e3d26a"></i>待排期</span></div>
+<div class="tabs" id="tabs"></div>
+<div id="rtitle" class="rtitle"></div>
+<div id="rsub" class="rsub"></div>
+<div id="chart-wrap"><div class="sub" style="margin-top:16px">正在读取 data.xlsx 并生成甘特图…</div></div>
+<div id="err"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+var COLORS = {'已完成':'#2e9e5b','进行中':'#2f6fd0','延期':'#d95336','计划':'#b9c2cc','里程碑':'#6b3fa0','待排期':'#e3d26a'};
+var REGION_ORDER = ['欧洲','韩国','柬埔寨','泰国'];
+var DATA = {};
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function p2(n){return String(n).padStart(2,'0');}
+function fmtD(d){return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());}
+function serialToDate(v){
+  if(v===null||v===undefined||v==='')return null;
+  if(typeof v==='number'&&isFinite(v)){var ms=Math.round((v-25569)*86400000);var d=new Date(ms);return new Date(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate());}
+  if(v instanceof Date&&!isNaN(v))return new Date(v.getFullYear(),v.getMonth(),v.getDate());
+  var m=String(v).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  return null;
+}
+function parseSheet(ws){
+  var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  var title=(rows[0]&&rows[0][0]!=null)?String(rows[0][0]):'';
+  var subtitle=(rows[1]&&rows[1][0]!=null)?String(rows[1][0]):'';
+  var periods=[];
+  if(rows[0]){for(var c=9;c<rows[0].length;c++){var d=serialToDate(rows[0][c]);if(d)periods.push(d);else if(periods.length)break;}}
+  var hr=2;
+  for(var i=0;i<rows.length;i++){if(rows[i]&&rows[i][0]!=null&&String(rows[i][0]).trim()==='编号'){hr=i;break;}}
+  var items=[];
+  for(var r=hr+1;r<rows.length;r++){
+    var row=rows[r];if(!row)continue;
+    var A=row[0]!=null?String(row[0]).trim():'';
+    var B=row[1]!=null?String(row[1]).trim():'';
+    var C=row[2]!=null?String(row[2]).trim():'';
+    if(!A&&B&&!C){items.push({type:'phase',name:B});continue;}
+    if(A&&C){
+      items.push({type:'task',no:A,name:C,owner:row[3]!=null?String(row[3]).trim():'',
+        start:serialToDate(row[4]),end:serialToDate(row[5]),
+        status:row[6]!=null?String(row[6]).trim():'',note:row[7]!=null?String(row[7]).trim():''});
+    }
+  }
+  return {title:title,subtitle:subtitle,periods:periods,items:items};
+}
+function windowOf(data){
+  var P=data.periods;
+  if(P.length>=2){var last=P[P.length-1],prev=P[P.length-2];return [P[0],new Date(last.getTime()+(last.getTime()-prev.getTime()))];}
+  var s=null,e=null;
+  data.items.forEach(function(it){if(it.type==='task'){if(it.start&&(!s||it.start<s))s=it.start;if(it.end&&(!e||it.end>e))e=it.end;}});
+  if(s&&e)return [s,new Date(e.getTime()+86400000)];
+  var now=new Date();return [new Date(now.getFullYear(),now.getMonth(),1),new Date(now.getFullYear(),now.getMonth()+6,1)];
+}
+function renderRegion(name){
+  var data=DATA[name];if(!data)return;
+  document.getElementById('rtitle').textContent=data.title||name;
+  document.getElementById('rsub').textContent=data.subtitle||'';
+  var w=windowOf(data),ws0=w[0],we0=w[1],span=we0-ws0;
+  function pct(d){return (d-ws0)/span*100;}
+  var labels='',lines='';
+  var d=new Date(ws0.getFullYear(),ws0.getMonth(),1);
+  if(d<ws0)d=new Date(ws0.getFullYear(),ws0.getMonth()+1,1);
+  for(;d<we0;d=new Date(d.getFullYear(),d.getMonth()+1,1)){
+    var p=pct(d).toFixed(2);
+    lines+='<div class="vline" style="left:'+p+'%"></div><div class="vtag" style="left:calc('+p+'% + 3px)">'+d.getFullYear()+'/'+p2(d.getMonth()+1)+'/01</div>';
+    labels+='<div class="mh" style="left:'+p+'%">'+d.getFullYear()+'年'+(d.getMonth()+1)+'月</div>';
+  }
+  var today=new Date();today.setHours(0,0,0,0);
+  if(today>=ws0&&today<=we0){var tp=pct(today).toFixed(2);lines+='<div class="vline today" style="left:'+tp+'%"></div><div class="vtag today-tag" style="left:calc('+tp+'% + 4px)">今天 '+today.getFullYear()+'/'+p2(today.getMonth()+1)+'/'+p2(today.getDate())+'</div>';}
+  var html='<div class="chart"><div class="hcell">任务 / 说明</div><div class="hcell">负责人 · 计划日期 · 状态</div><div class="hcell htime">'+labels+'</div>';
+  data.items.forEach(function(it){
+    if(it.type==='phase'){html+='<div class="phase">'+esc(it.name)+'</div>';return;}
+    var dispName=/^\d/.test(it.name)?it.name:(it.no?it.no+' · '+it.name:it.name);
+    html+='<div class="task"><div class="tname">'+esc(dispName)+'</div>'+(it.note?'<div class="tnote">'+esc(it.note)+'</div>':'')+'</div>';
+    var dates, badge='';
+    if(!it.start||!it.end)dates='待排期';
+    else if(it.start.getTime()===it.end.getTime())dates=fmtD(it.start);
+    else dates=fmtD(it.start)+' → '+fmtD(it.end);
+    if(it.status)badge='<br><span class="badge" style="background:'+(COLORS[it.status]||'#8296a8')+'">'+esc(it.status)+'</span>';
+    html+='<div class="meta">'+esc(it.owner||'—')+'<br><span class="dates">'+dates+'</span>'+badge+'</div>';
+    var track='';
+    if(!it.start||!it.end){track='<span class="tbd-note">待排期</span>';}
+    else if(it.start.getTime()===it.end.getTime()){
+      if(it.start>=we0)track='<div class="diamond" style="left:calc(99.3% - 6px);opacity:.45" title="'+fmtD(it.start)+'"></div>';
+      else track='<div class="diamond" style="left:calc('+pct(it.start).toFixed(2)+'% - 6px)" title="'+fmtD(it.start)+'"></div>';
+    }else{
+      var color=COLORS[it.status]||'#b9c2cc';
+      if(it.start>=we0)track='<div class="bar far" style="left:99.2%;width:0.8%;background:'+color+'" title="'+fmtD(it.start)+' → '+fmtD(it.end)+'"></div>';
+      else{var l=Math.max(0,pct(it.start)),rr=Math.min(100,pct(it.end)),wd=Math.max(0.8,rr-l);
+        track='<div class="bar" style="left:'+l.toFixed(2)+'%;width:'+wd.toFixed(2)+'%;background:'+color+'" title="'+fmtD(it.start)+' → '+fmtD(it.end)+'"></div>';}
+    }
+    html+='<div class="track">'+track+'</div>';
+  });
+  html+='<div class="lines">'+lines+'</div></div>';
+  document.getElementById('chart-wrap').innerHTML=html;
+}
+function showRegion(name){
+  var tabs=document.getElementById('tabs').children;
+  for(var i=0;i<tabs.length;i++)tabs[i].className='tab'+(tabs[i].getAttribute('data-r')===name?' on':'');
+  renderRegion(name);
+}
+(function(){
+  var src=new URLSearchParams(location.search).get('src')||'data.xlsx';
+  document.getElementById('dl').href=src;
+  fetch(src).then(function(r){
+    if(!r.ok)throw new Error('数据文件读取失败（HTTP '+r.status+'）：'+src);
+    var lm=r.headers.get('Last-Modified');
+    if(lm){var dt=new Date(lm);var s=dt.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+      document.getElementById('last-updated').textContent='数据文件更新：'+s.replace(/\//g,'-')+'（北京时间）';}
+    else document.getElementById('last-updated').textContent='数据文件：'+src;
+    return r.arrayBuffer();
+  }).then(function(buf){
+    var wb=XLSX.read(new Uint8Array(buf),{type:'array'});
+    REGION_ORDER.forEach(function(n){if(wb.SheetNames.indexOf(n)>=0)DATA[n]=parseSheet(wb.Sheets[n]);});
+    var names=Object.keys(DATA);
+    if(!names.length)throw new Error('数据文件里没有找到 欧洲/韩国/柬埔寨/泰国 任何一个 sheet。');
+    var tabsHtml='';
+    names.forEach(function(n){tabsHtml+='<span class="tab" data-r="'+esc(n)+'" onclick="showRegion(\''+esc(n)+'\')">'+esc(n)+'</span>';});
+    document.getElementById('tabs').innerHTML=tabsHtml;
+    showRegion(names[0]);
+  }).catch(function(e){
+    document.getElementById('last-updated').textContent='数据文件读取失败';
+    document.getElementById('chart-wrap').innerHTML='';
+    document.getElementById('err').innerHTML='<div class="err">'+esc(e.message||e)+'<br>请确认 data.xlsx 与本页在同一目录，或用 ?src= 指向可公开读取的 Excel 直链。</div>';
+  });
+})();
+</script>
+</body></html>
